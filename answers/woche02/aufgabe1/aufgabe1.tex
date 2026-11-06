@@ -1,0 +1,137 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[ngerman]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, decorations.pathreplacing}
+
+\title{Algorithm Engineering\\Woche 2, Aufgabe 1}
+\author{Jan Vogt}
+\date{}
+
+\colorlet{tnull}{blue!35}
+\colorlet{teins}{orange!55}
+
+\def\w{0.72}
+\def\h{0.6}
+
+\newcommand{\zeile}[3]{
+  \foreach \i in {0,...,7} {
+    \pgfmathtruncatemacro{\idx}{#3 + \i}
+    \draw[fill=white] (#1 + \i * \w, #2) rectangle ++(\w, \h);
+    \node[font=\scriptsize] at (#1 + \i * \w + \w / 2, #2 + \h / 2) {a[\idx]};
+  }
+}
+
+\newcommand{\feld}[5]{
+  \draw[fill=#5] (#1 + #3 * \w, #2) rectangle ++(\w, \h);
+  \node[font=\scriptsize\bfseries] at (#1 + #3 * \w + \w / 2, #2 + \h / 2) {a[#4]};
+}
+
+\tikzset{
+  kern/.style={draw, rounded corners, minimum width=5.76cm, minimum height=0.8cm, fill=gray!10},
+  nr/.style={circle, draw, fill=white, inner sep=1pt, font=\scriptsize\bfseries},
+  rahmen/.style={draw, rounded corners=8pt, gray!60, line width=0.8pt},
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{center}
+\begin{tikzpicture}
+
+  \draw[rahmen] (-0.4, 0.4) rectangle (14.56, 9.2);
+  \node[font=\bfseries] at (7.08, 8.8) {Problem: False Sharing (\texttt{++a[id]})};
+
+  \node[kern] at (2.88, 7.8) {Kern 0: Thread 0 macht \texttt{++a[0]}};
+  \node[kern] at (11.28, 7.8) {Kern 1: Thread 1 macht \texttt{++a[1]}};
+
+  \zeile{0}{5.6}{0}
+  \feld{0}{5.6}{0}{0}{tnull}
+  \zeile{8.4}{5.6}{0}
+  \feld{8.4}{5.6}{1}{1}{teins}
+  \node[font=\small, anchor=north west] at (0, 5.45) {L1-Cache von Kern 0};
+  \node[font=\small, anchor=north west] at (8.4, 5.45) {L1-Cache von Kern 1};
+
+  \draw[red, line width=1.5pt, dashed] (8.4 - 0.08, 5.6 - 0.08) rectangle ++(8 * \w + 0.16, \h + 0.16);
+
+  \draw[-{Stealth}, thick, blue!70!black] (0.36, 7.4) -- (0.36, 6.2);
+  \node[nr] at (0.75, 6.8) {1};
+  \node[font=\small, anchor=west] at (1.0, 6.8) {schreibt a[0]};
+
+  \draw[-{Stealth}, thick, red] (5.76, 6.0) to[bend left=30] node[nr, midway] {2} (8.3, 6.0);
+  \node[font=\small, red, align=center] at (7.08, 7.05) {macht Kopie\\ ungültig};
+
+  \draw[rounded corners, fill=gray!10] (3.4, 1.0) rectangle (10.76, 3.0);
+  \node[font=\small] at (7.08, 2.7) {gemeinsamer Speicher (L3-Cache / RAM)};
+  \zeile{4.2}{1.6}{0}
+  \feld{4.2}{1.6}{0}{0}{tnull}
+  \feld{4.2}{1.6}{1}{1}{teins}
+  \draw[decorate, decoration={brace, mirror, amplitude=4pt}]
+    (4.2, 1.5) -- (4.2 + 8 * \w, 1.5) node[midway, below=4pt, font=\scriptsize] {eine Cache Line = 64 Byte};
+
+  \draw[-{Stealth}, thick, red] (7.9, 3.0) -- (8.25, 5.45) node[nr, pos=0.45] {3};
+  \node[font=\small, red, align=left, anchor=west] at (8.5, 4.2) {Kern 1 muss die ganze\\ Cache Line neu laden};
+
+  \draw[-{Stealth}, thick, gray] (5.0, 3.0) -- (4.6, 5.45);
+
+  \node[font=\small, align=center] at (1.6, 3.9) {danach dasselbe\\ andersrum, die Line\\ wandert ständig\\ hin und her};
+
+  \draw[rahmen] (-0.4, -7.4) rectangle (14.56, -0.2);
+  \node[font=\bfseries] at (7.08, -0.8) {Lösung: Padding (\texttt{++a[id * 8]})};
+
+  \node[kern] at (2.88, -1.8) {Kern 0: Thread 0 macht \texttt{++a[0]}};
+  \node[kern] at (11.28, -1.8) {Kern 1: Thread 1 macht \texttt{++a[8]}};
+
+  \zeile{0}{-4.0}{0}
+  \feld{0}{-4.0}{0}{0}{tnull}
+  \zeile{8.4}{-4.0}{8}
+  \feld{8.4}{-4.0}{0}{8}{teins}
+  \node[font=\small, anchor=north west] at (0, -4.05) {L1-Cache von Kern 0};
+  \node[font=\small, anchor=north west] at (8.4, -4.05) {L1-Cache von Kern 1};
+
+  \draw[-{Stealth}, thick, blue!70!black] (0.36, -2.2) -- (0.36, -3.4);
+  \node[font=\small, anchor=west] at (0.6, -2.8) {schreibt a[0]};
+  \draw[-{Stealth}, thick, orange!80!black] (8.76, -2.2) -- (8.76, -3.4);
+  \node[font=\small, anchor=west] at (9.0, -2.8) {schreibt a[8]};
+
+  \node[font=\small, green!50!black, align=center] at (7.08, -3.0) {kein\\ Konflikt};
+
+  \draw[rounded corners, fill=gray!10] (0.8, -7.1) rectangle (13.36, -4.85);
+  \zeile{1.32}{-6.1}{0}
+  \feld{1.32}{-6.1}{0}{0}{tnull}
+  \zeile{7.08}{-6.1}{8}
+  \feld{7.08}{-6.1}{0}{8}{teins}
+  \draw[decorate, decoration={brace, mirror, amplitude=4pt}]
+    (1.32, -6.2) -- (1.32 + 8 * \w, -6.2) node[midway, below=4pt, font=\scriptsize] {Cache Line 1};
+  \draw[decorate, decoration={brace, mirror, amplitude=4pt}]
+    (7.08, -6.2) -- (7.08 + 8 * \w, -6.2) node[midway, below=4pt, font=\scriptsize] {Cache Line 2};
+  \node[font=\small] at (7.08, -5.2) {gemeinsamer Speicher (L3-Cache / RAM)};
+
+\end{tikzpicture}
+\end{center}
+
+\subsection*{Messung}
+
+Mit \texttt{false\_sharing\_test.cpp} habe ich das Programm von Folie 9 und 10 mit 4 Threads und
+verschiedenen Abständen zwischen den Zählern laufen lassen. Jede Variante lief 10 mal, weil die
+Zeiten auf meinem Laptop (Apple M3) ziemlich stark schwanken.
+
+\begin{center}
+\begin{tabular}{rrrr}
+PAD & Abstand & beste Zeit [s] & Median [s] \\
+\hline
+1 & 8 Byte & 1.200 & 1.408 \\
+8 & 64 Byte & 0.807 & 1.040 \\
+16 & 128 Byte & 0.800 & 1.127 \\
+\end{tabular}
+\end{center}
+
+Ohne Padding ist das Programm also deutlich langsamer, bei der besten Zeit ungefähr um den Faktor
+1,5. Laut \texttt{sysctl hw.cachelinesize} hat der M3 eigentlich 128 Byte große Cache Lines.
+Trotzdem war bei meiner Messung zwischen 64 und 128 Byte Abstand kein klarer Unterschied zu
+sehen. Woran das genau liegt, konnte ich nicht herausfinden.
+
+\end{document}

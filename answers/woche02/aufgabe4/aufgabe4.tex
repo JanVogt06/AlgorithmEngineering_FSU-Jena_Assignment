@@ -1,0 +1,73 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[ngerman]{babel}
+\usepackage[margin=2.5cm]{geometry}
+
+\title{Algorithm Engineering\\Woche 2, Aufgabe 4}
+\author{Jan Vogt}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section*{$\pi$ mit \#pragma omp for}
+
+In \texttt{pi\_omp\_for.cpp} ist das Programm \texttt{pi\_numerical\_integration.cpp} aus der
+letzten Vorlesung mit \texttt{\#pragma omp for} parallelisiert. Die Schleife wird von OpenMP auf
+die Threads aufgeteilt, jeder Thread summiert in eine lokale Variable und am Ende wird diese mit
+\texttt{\#pragma omp atomic} zur gemeinsamen Summe addiert:
+\begin{verbatim}
+#pragma omp parallel num_threads(num_threads)
+{
+  double sum_local = 0.0;
+#pragma omp for schedule(runtime)
+  for (int i = 0; i < num_steps; i++) {
+    double x = (i + 0.5) * width;
+    sum_local = sum_local + (1.0 / (1.0 + x * x));
+  }
+#pragma omp atomic
+  sum += sum_local;
+}
+\end{verbatim}
+Mit \texttt{schedule(runtime)} kann man den Schedule beim Starten über die Umgebungsvariable
+festlegen, zum Beispiel \verb|OMP_SCHEDULE=static ./pi_omp_for 8|. Die Threadanzahl wird als
+Argument übergeben.
+
+\subsection*{Messung}
+
+Gemessen habe ich auf meinem Laptop (Apple M3) mit 100.000.000 Schritten, ohne Optimierung und
+jeweils 5 Läufen. In der Tabelle steht der Median in Sekunden.
+
+\begin{center}
+\begin{tabular}{lrrrr}
+Schedule & 1 Thread & 2 Threads & 4 Threads & 8 Threads \\
+\hline
+\texttt{static} & 0.1401 & 0.0709 & 0.0372 & 0.0314 \\
+\texttt{dynamic, 1} & 0.5664 & 2.9519 & 2.3110 & 4.1473 \\
+\texttt{dynamic, 1000} & 0.1404 & 0.0720 & 0.0371 & 0.0286 \\
+\texttt{dynamic, 100000} & 0.1400 & 0.0710 & 0.0365 & 0.0273 \\
+\texttt{guided} & 0.1400 & 0.0710 & 0.0368 & 0.0273 \\
+\end{tabular}
+\end{center}
+
+Mit \texttt{dynamic, 1} ist das Programm mit mehreren Threads viel langsamer als mit einem, weil
+sich die Threads für jede einzelne der 100 Millionen Iterationen neue Arbeit holen müssen. Ohne
+\texttt{OMP\_SCHEDULE} waren die Zeiten bei mir genauso schlecht wie mit \texttt{dynamic, 1}, man
+sollte die Variable bei \texttt{schedule(runtime)} also immer setzen.
+
+Bis 4 Threads sind die anderen Schedules ungefähr gleich schnell, weil jede Iteration gleich viel
+Arbeit ist. Mit 8 Threads sind \texttt{dynamic, 100000} und \texttt{guided} aber etwa 13 Prozent
+schneller als \texttt{static}. Das ist mir auch im Zusammenhang mit Woche 1 aufgefallen: Dort
+mussten bei der statischen Aufteilung vermutlich die Threads auf den Performance-Kernen auf die
+langsameren Effizienz-Kerne warten. Mit \texttt{dynamic} können sich die schnellen Kerne einfach
+mehr Blöcke holen.
+Das passt zu Folie 19, wo steht, dass \texttt{static} bei Effizienz-Kernen nicht unbedingt die
+beste Wahl ist.
+
+Außerdem war $\pi$ bei \texttt{static} und gleicher Threadanzahl fast immer exakt gleich, bei
+\texttt{dynamic} dagegen in den letzten Stellen bei jedem Lauf etwas anders, weil die Blöcke jedes
+Mal anders auf die Threads verteilt werden.
+
+\end{document}

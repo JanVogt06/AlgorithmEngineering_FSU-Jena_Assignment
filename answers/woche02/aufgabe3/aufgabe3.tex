@@ -1,0 +1,88 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[ngerman]{babel}
+\usepackage[margin=2.5cm]{geometry}
+
+\title{Algorithm Engineering\\Woche 2, Aufgabe 3}
+\author{Jan Vogt}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section*{Coding Warmup (Folie 20)}
+
+Alle Programme liegen im selben Ordner und wurden auf meinem Laptop (Apple M3) mit
+\texttt{g++-16 -fopenmp} kompiliert und ausgeführt.
+
+\subsection*{1. Race Condition mit std::mutex beheben}
+
+Auf Folie 13 schreiben alle Threads am Ende gleichzeitig in die gemeinsame Variable \texttt{pi}.
+\texttt{pi += ...} besteht aber aus Lesen, Addieren und Schreiben. Wenn zwei Threads gleichzeitig
+lesen, geht der Beitrag von einem der beiden verloren. In \texttt{race\_condition.cpp} wird das
+Update deshalb mit einem \texttt{std::mutex} geschützt:
+\begin{verbatim}
+lock_guard<mutex> lock(pi_mutex);
+pi += sum_local * 4 * width;
+\end{verbatim}
+Mit 100.000.000 Schritten ist der Fehler auch ohne Mutex in 20 Läufen nie aufgetreten, weil die
+Threads zu unterschiedlichen Zeiten fertig werden. Deshalb habe ich beide Versionen mit nur 1000
+Schritten jeweils 2000 mal laufen lassen:
+
+\begin{center}
+\begin{tabular}{lrl}
+Version & Anzahl & Ergebnis \\
+\hline
+ohne Mutex & 1960 & 3.1415927369231262 \\
+ & 3 & 3.1415927369231271 \\
+ & 18 & 2.3564443034735985 \\
+ & 18 & 2.3559443019110908 \\
+ & 1 & 2.3554448015985905 \\
+\hline
+mit Mutex & 1994 & 3.1415927369231262 \\
+ & 6 & 3.1415927369231271 \\
+\end{tabular}
+\end{center}
+
+Ohne Mutex war das Ergebnis in 37 Läufen falsch. Die falschen Werte liegen alle bei ungefähr
+$\frac{3}{4}\pi$, es ist also genau der Beitrag von einem Thread verloren gegangen. Mit Mutex war
+das Ergebnis immer richtig. Dass sich in manchen Läufen die letzte Stelle unterscheidet, liegt daran,
+dass die Threads ihre Teilsummen in unterschiedlicher Reihenfolge addieren.
+
+\subsection*{2. Schedule für das Denoising-Programm}
+
+Auf Folie 16 braucht Bild \texttt{i} eine Arbeit proportional zu $i^2$. Ohne Schedule verteilt
+OpenMP die Schleife statisch in vier gleich große Blöcke. Weil die Schleife rückwärts läuft,
+bekommt Thread 0 die Bilder 63 bis 48 und hat damit viel mehr Arbeit als die anderen. Gemessen
+habe ich mit 4 Threads (jeweils 5 Läufe):
+
+\begin{center}
+\begin{tabular}{lr}
+Schedule & Zeit [s] \\
+\hline
+ohne Schedule & 0.503 bis 0.507 \\
+\texttt{static} & 0.504 bis 0.506 \\
+\texttt{static, 1} & 0.240 bis 0.320 \\
+\texttt{dynamic} & 0.224 bis 0.237 \\
+\texttt{dynamic, 1} & 0.224 bis 0.230 \\
+\texttt{dynamic, 4} & 0.225 bis 0.239 \\
+\texttt{guided} & 0.505 bis 0.513 \\
+\end{tabular}
+\end{center}
+
+Mit \texttt{schedule(dynamic, 1)} holt sich jeder Thread immer das nächste Bild, sobald er fertig
+ist. Dadurch ist das Programm etwa 2,2 mal schneller. \texttt{guided} bringt hier nichts, weil es
+am Anfang große Blöcke verteilt und der erste Block genau die schwersten Bilder enthält.
+
+\subsection*{3. Welcher Schedule erzeugt das Muster?}
+
+Das Muster auf Folie 20 entsteht mit \texttt{schedule(static, 22)}. Die 32 Iterationen werden in
+Blöcke mit 22 Iterationen aufgeteilt. Thread 0 bekommt den ersten Block (0 bis 21), Thread 1 den
+Rest (22 bis 31) und Thread 2 und 3 bekommen gar nichts. Das habe ich mit
+\texttt{schedule\_clause.cpp} getestet und es kam in jedem Lauf genau diese Aufteilung heraus. Mit
+\texttt{dynamic, 22} entstehen zwar dieselben zwei Blöcke, aber welcher Thread sie bekommt, ändert
+sich bei jedem Lauf.
+
+\end{document}
